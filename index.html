@@ -757,57 +757,93 @@
       return data.choices[0].message.content;
     }
 
-    /* ===== Convert file to PNG Blob for API ===== */
-    function fileToPngBlob(file) {
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0);
-          canvas.toBlob((blob) => {
-            if (blob) resolve(blob);
-            else reject(new Error('Failed to convert image'));
-          }, 'image/png');
-        };
-        img.onerror = () => reject(new Error('Failed to load image'));
-        img.src = URL.createObjectURL(file);
-      });
-    }
-
-    /* ===== Step 2: Edit template with gpt-image-1 ===== */
-    async function generateWithGptImage(apiKey, file, templateAnalysis, services, additional) {
-      const prompt = 'Edit this social media banner template (1080x1080). Template analysis:\n\n' +
-        templateAnalysis + '\n\n' +
+    /* ===== Step 2: Generate service background with gpt-image-1 ===== */
+    async function generateBackground(apiKey, templateAnalysis, services, additional) {
+      const prompt = 'Create a professional background image (1024x1024) for a social media banner.\n\n' +
+        'Template context:\n' + templateAnalysis + '\n\n' +
         'Business services: ' + services + '\n' +
         (additional ? 'Additional instructions: ' + additional + '\n' : '') +
         '\nInstructions:\n' +
-        '- DO NOT change the template layout, logo, footer, address, or any existing branding elements\n' +
-        '- ONLY fill the blank/white/empty areas with professional imagery related to "' + services + '"\n' +
-        '- Use the brand colors identified in the template analysis\n' +
-        '- Make the filled areas eye-catching and suitable for Instagram/Facebook\n' +
-        '- Keep all existing text readable and unobscured';
+        '- Create a visually stunning background related to "' + services + '"\n' +
+        '- Use colors that complement the brand colors described above\n' +
+        '- This will be placed BEHIND a template overlay, so make it a rich, full background\n' +
+        '- Do NOT include any text, logos, or overlay elements\n' +
+        '- Make it professional, eye-catching, suitable for Instagram/Facebook\n' +
+        '- Fill the entire image with relevant imagery — no blank areas';
 
-      const pngBlob = await fileToPngBlob(file);
-      const pngFile = new File([pngBlob], 'template.png', { type: 'image/png' });
-
-      const formData = new FormData();
-      formData.append('model', 'gpt-image-1');
-      formData.append('image', pngFile);
-      formData.append('prompt', prompt);
-      formData.append('size', '1024x1024');
-
-      const resp = await fetch('https://api.openai.com/v1/images/edits', {
+      const resp = await fetch('https://api.openai.com/v1/images/generations', {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + apiKey },
-        body: formData
+        headers: {
+          'Authorization': 'Bearer ' + apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-image-1',
+          prompt: prompt,
+          size: '1024x1024',
+          n: 1
+        })
       });
 
       const data = await resp.json();
       if (data.error) throw new Error(data.error.message);
       return data.data[0];
+    }
+
+    /* ===== Step 3: Composite template over AI background ===== */
+    function compositeImages(templateDataUrl, backgroundDataUrl) {
+      return new Promise((resolve, reject) => {
+        const bgImg = new Image();
+        const tplImg = new Image();
+        let loaded = 0;
+
+        function onLoad() {
+          loaded++;
+          if (loaded < 2) return;
+
+          const canvas = document.createElement('canvas');
+          canvas.width = 1024;
+          canvas.height = 1024;
+          const ctx = canvas.getContext('2d');
+
+          ctx.drawImage(bgImg, 0, 0, 1024, 1024);
+
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = 1024;
+          tempCanvas.height = 1024;
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCtx.drawImage(tplImg, 0, 0, 1024, 1024);
+
+          const imageData = tempCtx.getImageData(0, 0, 1024, 1024);
+          const pixels = imageData.data;
+          const threshold = 240;
+
+          for (let i = 0; i < pixels.length; i += 4) {
+            const r = pixels[i];
+            const g = pixels[i + 1];
+            const b = pixels[i + 2];
+            if (r > threshold && g > threshold && b > threshold) {
+              pixels[i + 3] = 0;
+            }
+          }
+
+          tempCtx.putImageData(imageData, 0, 0);
+
+          ctx.drawImage(tempCanvas, 0, 0);
+
+          const dataUrl = canvas.toDataURL('image/png');
+          const base64 = dataUrl.split(',')[1];
+          resolve(base64);
+        }
+
+        bgImg.onload = onLoad;
+        tplImg.onload = onLoad;
+        bgImg.onerror = () => reject(new Error('Failed to load background image'));
+        tplImg.onerror = () => reject(new Error('Failed to load template image'));
+
+        tplImg.src = templateDataUrl;
+        bgImg.src = backgroundDataUrl;
+      });
     }
 
     /* ===== Generate handler ===== */
@@ -826,19 +862,28 @@
         btnText.textContent = 'Analyzing your template\u2026';
         const analysis = await analyzeTemplate(apiKey, templateBase64);
 
-        /* Step 2: Edit template with gpt-image-1 */
-        btnText.textContent = 'Generating your banner\u2026';
-        const result = await generateWithGptImage(apiKey, templateFile, analysis, services, additional);
+        /* Step 2: Generate AI background with gpt-image-1 */
+        btnText.textContent = 'Generating background\u2026';
+        const bgResult = await generateBackground(apiKey, analysis, services, additional);
 
-        /* Extract base64 data */
-        let b64;
-        if (result.b64_json) {
-          b64 = result.b64_json;
-        } else if (result.url) {
-          b64 = await urlToBase64(result.url);
+        let bgDataUrl;
+        if (bgResult.b64_json) {
+          bgDataUrl = 'data:image/png;base64,' + bgResult.b64_json;
+        } else if (bgResult.url) {
+          const resp = await fetch(bgResult.url);
+          const blob = await resp.blob();
+          bgDataUrl = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+          });
         } else {
           throw new Error('Unexpected response format from OpenAI.');
         }
+
+        /* Step 3: Composite template over AI background */
+        btnText.textContent = 'Compositing banner\u2026';
+        const b64 = await compositeImages(templateBase64, bgDataUrl);
 
         generatedBase64 = b64;
         resultImg.src = 'data:image/png;base64,' + b64;
