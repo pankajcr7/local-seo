@@ -752,56 +752,47 @@
       });
     }
 
-    /* ===== Primary: Image Edit ===== */
-    async function callImageEdit(apiKey, file, services, additional) {
-      const prompt = [
-        'You are creating a professional social media banner (1080x1080).',
-        'I\'m providing a template image that contains a business logo, footer with address, and/or branding elements.',
-        'The blank/white/empty areas of this template need to be filled with visually appealing imagery.',
-        '',
-        'Business services: ' + services,
-        additional ? 'Additional instructions: ' + additional : '',
-        '',
-        'Instructions:',
-        '- PRESERVE all existing elements in the template (logo, text, footer, address, branding)',
-        '- FILL the blank/white/empty areas with professional, relevant imagery related to "' + services + '"',
-        '- Make it look like a polished, professional social media post',
-        '- Use colors that complement the existing template branding',
-        '- The result should be eye-catching and suitable for Instagram/Facebook',
-        '- Ensure text remains readable and not covered by generated imagery'
-      ].join('\n');
-
-      const pngBlob = await fileToPngBlob(file);
-      const pngFile = new File([pngBlob], 'template.png', { type: 'image/png' });
-
-      const formData = new FormData();
-      formData.append('model', 'gpt-image-1');
-      formData.append('image', pngFile);
-      formData.append('prompt', prompt);
-      formData.append('size', '1024x1024');
-      formData.append('quality', 'high');
-      formData.append('response_format', 'b64_json');
-
-      const resp = await fetch('https://api.openai.com/v1/images/edits', {
+    /* ===== Step 1: Analyze template with GPT-4o vision ===== */
+    async function analyzeTemplate(apiKey, templateBase64) {
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + apiKey },
-        body: formData
+        headers: {
+          'Authorization': 'Bearer ' + apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          max_tokens: 500,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Analyze this social media banner template. Describe in detail: 1) Where is the logo positioned and what does it look like? 2) Where is the footer/address text and what does it say? 3) What are the brand colors? 4) Which areas are blank/white/empty that need to be filled? 5) What is the overall layout structure? Be concise but specific.' },
+              { type: 'image_url', image_url: { url: templateBase64 } }
+            ]
+          }]
+        })
       });
-
       const data = await resp.json();
       if (data.error) throw new Error(data.error.message);
-      return data.data[0];
+      return data.choices[0].message.content;
     }
 
-    /* ===== Fallback: Image Generation ===== */
-    async function callImageGeneration(apiKey, services, additional) {
-      const prompt = [
-        'Create a professional social media banner (1080x1080) for a business offering: ' + services + '.',
-        additional || '',
-        'Make it modern, eye-catching, suitable for Instagram/Facebook.',
-        'Include relevant imagery for the services.',
-        'Leave space for a logo at the top and business info at the bottom.'
-      ].join(' ');
+    /* ===== Step 2: Generate banner with DALL-E 3 ===== */
+    async function generateWithDalle3(apiKey, templateAnalysis, services, additional) {
+      const prompt = `Create a professional social media banner (1080x1080) based on this template layout:
+
+${templateAnalysis}
+
+Business services: ${services}
+${additional ? 'Additional instructions: ' + additional : ''}
+
+Instructions:
+- Recreate the template layout exactly as described above
+- PRESERVE the logo, footer text, address, and branding elements in their original positions
+- FILL the blank/empty areas with stunning, professional imagery related to "${services}"
+- Use the brand colors identified in the template
+- Make it eye-catching and suitable for Instagram/Facebook
+- Ensure all text remains readable`;
 
       const resp = await fetch('https://api.openai.com/v1/images/generations', {
         method: 'POST',
@@ -810,10 +801,10 @@
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'gpt-image-1',
+          model: 'dall-e-3',
           prompt: prompt,
           size: '1024x1024',
-          quality: 'high',
+          quality: 'hd',
           n: 1,
           response_format: 'b64_json'
         })
@@ -836,23 +827,13 @@
       const startTime  = Date.now();
 
       try {
-        let result;
+        /* Step 1: Analyze template with GPT-4o vision */
+        btnText.textContent = 'Analyzing your template\u2026';
+        const analysis = await analyzeTemplate(apiKey, templateBase64);
 
-        /* Primary: image edit */
-        try {
-          result = await callImageEdit(apiKey, templateFile, services, additional);
-        } catch (editErr) {
-          /* Fallback: generation (only if edit endpoint fails at API level, not auth) */
-          const msg = editErr.message || '';
-          if (msg.toLowerCase().includes('invalid') && msg.toLowerCase().includes('key')) {
-            throw editErr;
-          }
-          if (msg.toLowerCase().includes('rate')) {
-            throw editErr;
-          }
-          console.warn('Edit endpoint failed, falling back to generation:', msg);
-          result = await callImageGeneration(apiKey, services, additional);
-        }
+        /* Step 2: Generate banner with DALL-E 3 */
+        btnText.textContent = 'Generating your banner\u2026';
+        const result = await generateWithDalle3(apiKey, analysis, services, additional);
 
         /* Extract base64 data */
         let b64;
@@ -868,7 +849,7 @@
         resultImg.src = 'data:image/png;base64,' + b64;
 
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        resultMeta.textContent = 'Generated in ' + elapsed + 's \u00b7 1024\u00d71024';
+        resultMeta.textContent = 'Generated in ' + elapsed + 's \u00b7 1024\u00d71024 (dall-e-3)';
         resultArea.classList.add('visible');
         resultArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
