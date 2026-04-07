@@ -1037,17 +1037,15 @@ Be specific and concise.`
       }[style] || 'photorealistic professional photography, premium advertising quality, polished commercial retouching';
 
       const exampleStyleRecipe = [
-        'Design target inspired by the shared example poster, but use it for style only:',
-        '- premium clinic/social-media poster aesthetic, not a plain photo edit',
+        'Design target: premium healthcare/social-media poster aesthetic.',
+        '- not a plain photo edit and not a copied reference banner',
         '- strong headline-led composition with clean text-safe zones',
-        '- if the layout allows, favor a poster structure similar to the sample: strong hero area, supporting collage visuals to one side, and polished footer/support zones',
-        '- rich pink/magenta brand gradient or brand-colored hero area when it fits the template palette',
-        '- elegant curved/flowing background shapes and soft light gradients',
-        '- multiple service-relevant visuals presented as a neat collage, especially circular or framed crops if the layout allows',
+        '- polished poster structure with a hero area, supporting collage visuals, and balanced footer/support zones when the template layout allows',
+        '- use brand-colored gradients and elegant curved/flowing background shapes only if they fit the uploaded template palette',
+        '- multiple service-relevant visuals may be presented as a neat collage, especially circular or framed crops if the layout allows',
         '- clean professional healthcare-ad look with balanced whitespace and sharp contrast',
         '- support imagery should feel like polished brochure/poster design, not random stock photography pasted in',
-        '- do NOT copy the sample image logo, footer, phone/address strip, doctor cutout, or any exact person/product from the sample',
-        '- final output should resemble a finished promotional post/banner for a clinic or service business'
+        '- final output should resemble a finished promotional post/banner for the requested business only'
       ].join('\n');
 
       const prompt = [
@@ -1066,7 +1064,8 @@ Be specific and concise.`
         '- Build the result like a premium marketing poster with deliberate composition, not a single generic AI scene',
         '- Prefer structured banner composition: bold hero area, supporting service visuals, framed crops, soft branded gradients, subtle background texture, and clean text-safe negative space where needed',
         '- If the template suggests circular frames, panels, or image placeholders, place focused visuals inside them rather than creating one giant photo across the whole canvas',
-        '- Use the shared sample only as style inspiration; never copy its branding, footer details, or person image',
+        '- Never invent or copy any logo, clinic name, footer strip, phone number, address, watermark, mascot, or brand mark that is not already present in the uploaded template',
+        '- Never import sample-specific content such as women/pregnancy branding, maternal icons, obstetrics/gynecology wording, or any unrelated specialty text',
         `- Visual style: ${styleGuide}`,
         `- Make the imagery directly relevant to "${services}" using premium healthcare/industry marketing aesthetics`,
         '- If there is a clear empty text area, add 3-4 short service-related bullet points in clean readable typography using the suggested points or close variants',
