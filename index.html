@@ -788,18 +788,18 @@
         },
         body: JSON.stringify({
           model: 'gpt-4o',
-          max_tokens: 600,
+          max_tokens: 700,
           messages: [{
             role: 'user',
             content: [
               {
                 type: 'text',
                 text: `Analyze this social media banner template in detail. Provide:
-1. BLANK AREAS: Describe exactly where the white/empty areas are (top, center, left panel, etc.) and their approximate size/proportion
-2. PRESERVED ELEMENTS: List all non-blank elements — logo text/icon and its position, footer text (address, phone, website), decorative borders/shapes
-3. COLOR PALETTE: List the 2-4 primary brand colors (approximate hex or descriptive names)
-4. LAYOUT: Describe the overall structure (e.g., "logo top-left, large blank center, footer strip at bottom")
-5. STYLE: What visual style does the template have (modern, classic, bold, minimal, etc.)?
+1. BLANK AREAS: Describe exactly which areas are genuinely empty image placeholders/background zones that should be filled, and which areas must remain clean for text readability.
+2. PRESERVED ELEMENTS: List every element that must never change — logo, text, contact details, borders, badges, icons, cutout people, existing photos/illustrations, product shots, decorative shapes.
+3. IMAGE FRAMES: Identify any circular frames, panels, cards, or shaped placeholders where imagery should be inserted.
+4. COLOR PALETTE: List the 2-4 primary brand colors.
+5. LAYOUT + STYLE: Describe the composition and what kind of professional banner style would fit best.
 Be specific and concise.`
               },
               { type: 'image_url', image_url: { url: base64DataUrl } }
@@ -812,87 +812,228 @@ Be specific and concise.`
       return data.choices[0].message.content;
     }
 
-    async function createMaskBlob(templateDataUrl, threshold) {
+    function buildBlankRegionMask(src, width, height, threshold) {
+      const totalPixels = width * height;
+      const candidate = new Uint8Array(totalPixels);
+      const visited = new Uint8Array(totalPixels);
+      const fillMask = new Uint8Array(totalPixels);
+      const queue = new Int32Array(totalPixels);
+      const thresholdDelta = 255 - threshold;
+      const minArea = Math.max(1500, Math.floor(totalPixels * Math.max(0.0035, 0.010 - thresholdDelta * 0.00025)));
+      const minEdgeArea = Math.max(800, Math.floor(totalPixels * Math.max(0.0015, 0.004 - thresholdDelta * 0.00012)));
+
+      function isCandidate(idx) {
+        const offset = idx * 4;
+        const alpha = src[offset + 3];
+        if (alpha < 16) return true;
+        const r = src[offset];
+        const g = src[offset + 1];
+        const b = src[offset + 2];
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const saturation = max - min;
+        const brightness = (r + g + b) / 3;
+        return brightness >= threshold && saturation <= 28;
+      }
+
+      for (let i = 0; i < totalPixels; i++) {
+        candidate[i] = isCandidate(i) ? 1 : 0;
+      }
+
+      for (let start = 0; start < totalPixels; start++) {
+        if (!candidate[start] || visited[start]) continue;
+        let head = 0;
+        let tail = 0;
+        let area = 0;
+        let touchesEdge = false;
+        let minX = width;
+        let minY = height;
+        let maxX = 0;
+        let maxY = 0;
+
+        visited[start] = 1;
+        queue[tail++] = start;
+
+        while (head < tail) {
+          const idx = queue[head++];
+          const x = idx % width;
+          const y = (idx - x) / width;
+          area++;
+          if (x === 0 || y === 0 || x === width - 1 || y === height - 1) touchesEdge = true;
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+
+          const up = idx - width;
+          const down = idx + width;
+          const left = idx - 1;
+          const right = idx + 1;
+
+          if (y > 0 && candidate[up] && !visited[up]) {
+            visited[up] = 1;
+            queue[tail++] = up;
+          }
+          if (y < height - 1 && candidate[down] && !visited[down]) {
+            visited[down] = 1;
+            queue[tail++] = down;
+          }
+          if (x > 0 && candidate[left] && !visited[left]) {
+            visited[left] = 1;
+            queue[tail++] = left;
+          }
+          if (x < width - 1 && candidate[right] && !visited[right]) {
+            visited[right] = 1;
+            queue[tail++] = right;
+          }
+        }
+
+        const bboxArea = Math.max(1, (maxX - minX + 1) * (maxY - minY + 1));
+        const fillRatio = area / bboxArea;
+        const shouldFill = (touchesEdge && area >= minEdgeArea) || (area >= minArea && fillRatio >= 0.42);
+
+        if (shouldFill) {
+          for (let i = 0; i < tail; i++) {
+            fillMask[queue[i]] = 1;
+          }
+        }
+      }
+
+      return fillMask;
+    }
+
+    async function createEditAssets(templateDataUrl, threshold) {
       return new Promise((resolve, reject) => {
         const img = new Image();
-        img.onload = () => {
+        img.onload = async () => {
+          const width = 1024;
+          const height = 1024;
           const canvas = document.createElement('canvas');
-          canvas.width = 1024;
-          canvas.height = 1024;
+          canvas.width = width;
+          canvas.height = height;
           const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, 1024, 1024);
+          ctx.drawImage(img, 0, 0, width, height);
 
-          const imageData = ctx.getImageData(0, 0, 1024, 1024);
+          const imageData = ctx.getImageData(0, 0, width, height);
           const src = imageData.data;
+          const fillMask = buildBlankRegionMask(src, width, height, threshold);
 
           const maskCanvas = document.createElement('canvas');
-          maskCanvas.width = 1024;
-          maskCanvas.height = 1024;
+          maskCanvas.width = width;
+          maskCanvas.height = height;
           const maskCtx = maskCanvas.getContext('2d');
-          const maskData = maskCtx.createImageData(1024, 1024);
-          const dst = maskData.data;
+          const maskData = maskCtx.createImageData(width, height);
+          const maskPixels = maskData.data;
 
-          for (let i = 0; i < src.length; i += 4) {
-            const r = src[i];
-            const g = src[i + 1];
-            const b = src[i + 2];
-            const isBlank = r > threshold && g > threshold && b > threshold;
-            dst[i] = 0;
-            dst[i + 1] = 0;
-            dst[i + 2] = 0;
-            dst[i + 3] = isBlank ? 0 : 255;
+          const overlayCanvas = document.createElement('canvas');
+          overlayCanvas.width = width;
+          overlayCanvas.height = height;
+          const overlayCtx = overlayCanvas.getContext('2d');
+          const overlayData = overlayCtx.createImageData(width, height);
+          const overlayPixels = overlayData.data;
+
+          for (let i = 0; i < fillMask.length; i++) {
+            const offset = i * 4;
+            const shouldFill = fillMask[i] === 1;
+
+            maskPixels[offset] = 0;
+            maskPixels[offset + 1] = 0;
+            maskPixels[offset + 2] = 0;
+            maskPixels[offset + 3] = shouldFill ? 0 : 255;
+
+            if (shouldFill) {
+              overlayPixels[offset] = 0;
+              overlayPixels[offset + 1] = 0;
+              overlayPixels[offset + 2] = 0;
+              overlayPixels[offset + 3] = 0;
+            } else {
+              overlayPixels[offset] = src[offset];
+              overlayPixels[offset + 1] = src[offset + 1];
+              overlayPixels[offset + 2] = src[offset + 2];
+              overlayPixels[offset + 3] = src[offset + 3];
+            }
           }
 
           maskCtx.putImageData(maskData, 0, 0);
-          maskCanvas.toBlob(resolve, 'image/png');
+          overlayCtx.putImageData(overlayData, 0, 0);
+
+          const [templateBlob, maskBlob, overlayBlob] = await Promise.all([
+            new Promise((res) => canvas.toBlob(res, 'image/png')),
+            new Promise((res) => maskCanvas.toBlob(res, 'image/png')),
+            new Promise((res) => overlayCanvas.toBlob(res, 'image/png'))
+          ]);
+
+          resolve({ templateBlob, maskBlob, overlayBlob });
         };
         img.onerror = reject;
         img.src = templateDataUrl;
       });
     }
 
-    async function templateToBlob(templateDataUrl) {
+    async function blobToDataUrl(blob) {
       return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    async function compositePreservedTemplate(editedDataUrl, overlayBlob) {
+      const overlayDataUrl = await blobToDataUrl(overlayBlob);
+      return new Promise((resolve, reject) => {
+        const editedImg = new Image();
+        const overlayImg = new Image();
+        let loaded = 0;
+
+        function handleLoad() {
+          loaded++;
+          if (loaded < 2) return;
           const canvas = document.createElement('canvas');
           canvas.width = 1024;
           canvas.height = 1024;
           const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, 1024, 1024);
-          canvas.toBlob(resolve, 'image/png');
-        };
-        img.onerror = reject;
-        img.src = templateDataUrl;
+          ctx.drawImage(editedImg, 0, 0, 1024, 1024);
+          ctx.drawImage(overlayImg, 0, 0, 1024, 1024);
+          resolve(canvas.toDataURL('image/png'));
+        }
+
+        editedImg.onload = handleLoad;
+        overlayImg.onload = handleLoad;
+        editedImg.onerror = () => reject(new Error('Failed to load generated image for final compositing.'));
+        overlayImg.onerror = () => reject(new Error('Failed to load template overlay for preservation.'));
+        editedImg.src = editedDataUrl;
+        overlayImg.src = overlayDataUrl;
       });
     }
 
     async function editTemplateWithAI(apiKey, templateDataUrl, templateAnalysis, services, additional, style, maskThreshold) {
-      const [templateBlob, maskBlob] = await Promise.all([
-        templateToBlob(templateDataUrl),
-        createMaskBlob(templateDataUrl, maskThreshold)
-      ]);
+      const { templateBlob, maskBlob, overlayBlob } = await createEditAssets(templateDataUrl, maskThreshold);
 
       const styleGuide = {
-        photorealistic: 'photorealistic professional photography, ultra-sharp, commercial quality, 8K resolution',
-        illustration: 'modern flat design illustration, clean vector aesthetic, bold shapes',
-        minimalist: 'minimalist design, clean lines, lots of breathing room, elegant simplicity',
-        corporate: 'corporate professional style, clean and trustworthy, business photography'
-      }[style] || 'photorealistic professional photography, ultra-sharp, commercial quality';
+        photorealistic: 'photorealistic professional photography, premium advertising quality, polished commercial retouching',
+        illustration: 'modern premium illustration, polished marketing graphic style, clean shapes and controlled composition',
+        minimalist: 'minimalist premium advertising design, subtle gradients, elegant composition, clean whitespace',
+        corporate: 'corporate professional campaign style, clean trustworthy healthcare marketing aesthetic'
+      }[style] || 'photorealistic professional photography, premium advertising quality, polished commercial retouching';
 
       const prompt = [
-        `Fill ONLY the transparent/blank areas of this social media banner with professional visual content for: "${services}".`,
+        `Fill ONLY the transparent blank regions of this banner for: "${services}".`,
         '',
-        `Template context: ${templateAnalysis}`,
+        `Template analysis: ${templateAnalysis}`,
         '',
         'CRITICAL RULES:',
-        '- Preserve ALL existing template elements EXACTLY: logo, text, address, phone number, borders, decorative elements, color scheme',
-        '- Fill blank areas ONLY with rich, high-quality visual imagery — NO new text unless it was already in the template',
+        '- Preserve every existing element exactly as-is: logo, all text, footer, phone/address, borders, badges, decorative shapes, existing people, faces, product shots, and cutout photos',
+        '- Never redraw, replace, restyle, or mutate any existing human/person already present in the template',
+        '- Add content only inside the masked blank regions',
+        '- Generate a polished professional social media banner, not a random full-scene stock photo',
+        '- Prefer structured banner composition: multiple relevant service visuals, framed crops, soft branded gradients, subtle background texture, and clean text-safe negative space where needed',
+        '- If the template suggests circular frames, panels, or image placeholders, place focused visuals inside them rather than creating one giant photo across the whole canvas',
         `- Visual style: ${styleGuide}`,
-        `- Create imagery that is directly relevant to "${services}" (show the actual work/product/service)`,
-        "- Match and complement the template's existing brand colors perfectly",
-        '- The final result should look like a professionally designed social media post',
-        '- Platform: Instagram/Facebook square format — ensure strong visual impact',
+        `- Make the imagery directly relevant to "${services}" using premium healthcare/industry marketing aesthetics`,
+        '- Avoid uncanny faces, distorted anatomy, extra fingers, warped objects, or noisy clutter',
+        '- Match the template brand colors and keep the result looking like an expertly designed ad creative',
+        '- Do not add new text beyond what already exists in the template',
         additional ? `- Additional requirements: ${additional}` : ''
       ].filter(Boolean).join('\n');
 
@@ -912,7 +1053,20 @@ Be specific and concise.`
 
       const data = await resp.json();
       if (data.error) throw new Error(data.error.message);
-      return data.data[0];
+      const result = data.data[0];
+
+      let editedDataUrl;
+      if (result.b64_json) {
+        editedDataUrl = 'data:image/png;base64,' + result.b64_json;
+      } else if (result.url) {
+        const resp2 = await fetch(result.url);
+        const blob = await resp2.blob();
+        editedDataUrl = await blobToDataUrl(blob);
+      } else {
+        throw new Error('Unexpected response format from OpenAI.');
+      }
+
+      return compositePreservedTemplate(editedDataUrl, overlayBlob);
     }
 
     /* ===== Generate handler ===== */
@@ -933,24 +1087,8 @@ Be specific and concise.`
         const analysis = await analyzeTemplate(apiKey, templateBase64);
 
         btnText.textContent = 'Generating professional banner… (2/2)';
-        const result = await editTemplateWithAI(apiKey, templateBase64, analysis, services, additional, style, maskThreshold);
-
-        let finalDataUrl;
-        if (result.b64_json) {
-          finalDataUrl = 'data:image/png;base64,' + result.b64_json;
-          generatedBase64 = result.b64_json;
-        } else if (result.url) {
-          const resp2 = await fetch(result.url);
-          const blob = await resp2.blob();
-          finalDataUrl = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.readAsDataURL(blob);
-          });
-          generatedBase64 = finalDataUrl.split(',')[1];
-        } else {
-          throw new Error('Unexpected response format from OpenAI.');
-        }
+        const finalDataUrl = await editTemplateWithAI(apiKey, templateBase64, analysis, services, additional, style, maskThreshold);
+        generatedBase64 = finalDataUrl.split(',')[1];
 
         resultImg.src = finalDataUrl;
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
