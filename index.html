@@ -541,25 +541,6 @@
       </div>
     </div>
 
-    <div class="card">
-      <label>Reference Banner Example <span class="optional">(optional)</span></label>
-      <div class="drop-zone" id="referenceDropZone">
-        <div class="drop-zone-content" id="referenceDropContent">
-          <div class="drop-zone-icon">&#127912;</div>
-          <div class="drop-zone-text">
-            Upload a sample banner you want to match
-          </div>
-          <span class="browse-btn" id="referenceBrowseBtn">Browse Reference</span>
-          <div class="drop-zone-text" style="font-size:0.78rem;">Use a polished example layout/style for better results</div>
-        </div>
-        <div class="preview-container" id="referencePreviewContainer">
-          <img id="referencePreviewImg" src="" alt="Reference banner preview">
-          <div class="preview-info" id="referencePreviewInfo"></div>
-          <button type="button" class="change-btn" id="referenceChangeBtn">Change reference</button>
-        </div>
-        <input type="file" id="referenceInput" accept="image/png,image/jpeg,image/jpg,image/webp">
-      </div>
-    </div>
 
     <!-- Services -->
     <div class="card">
@@ -641,14 +622,6 @@
     const changeBtn       = document.getElementById('changeBtn');
     const browseBtn       = document.getElementById('browseBtn');
     const fileInput       = document.getElementById('fileInput');
-    const referenceDropZone = document.getElementById('referenceDropZone');
-    const referenceDropContent = document.getElementById('referenceDropContent');
-    const referencePreviewContainer = document.getElementById('referencePreviewContainer');
-    const referencePreviewImg = document.getElementById('referencePreviewImg');
-    const referencePreviewInfo = document.getElementById('referencePreviewInfo');
-    const referenceChangeBtn = document.getElementById('referenceChangeBtn');
-    const referenceBrowseBtn = document.getElementById('referenceBrowseBtn');
-    const referenceInput = document.getElementById('referenceInput');
     const servicesInput   = document.getElementById('services');
     const extraPrompt     = document.getElementById('extraPrompt');
     const styleSelect     = document.getElementById('styleSelect');
@@ -667,8 +640,6 @@
     /* ===== State ===== */
     let templateFile    = null;   // raw File object
     let templateBase64  = null;   // data URL for preview
-    let referenceFile   = null;   // optional reference banner file
-    let referenceBase64 = null;   // optional reference banner data URL
     let generatedBase64 = null;   // base64 of result (no prefix)
     let isGenerating    = false;
     let errorTimer      = null;
@@ -698,47 +669,43 @@
     });
 
     /* ===== File upload / drag-drop ===== */
-    function bindImageDropZone({ dropZoneEl, dropContentEl, previewContainerEl, previewImgEl, previewInfoEl, browseBtnEl, changeBtnEl, inputEl, assign }) {
-      browseBtnEl.addEventListener('click', (e) => {
-        e.stopPropagation();
-        inputEl.click();
-      });
+    browseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.click();
+    });
 
-      changeBtnEl.addEventListener('click', (e) => {
-        e.stopPropagation();
-        inputEl.click();
-      });
+    changeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.click();
+    });
 
-      dropZoneEl.addEventListener('click', (e) => {
-        if (e.target === dropZoneEl || e.target.closest('.drop-zone-content')) {
-          inputEl.click();
-        }
-      });
+    dropZone.addEventListener('click', (e) => {
+      if (e.target === dropZone || e.target.closest('.drop-zone-content')) {
+        fileInput.click();
+      }
+    });
 
-      dropZoneEl.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZoneEl.classList.add('dragover');
-      });
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
 
-      dropZoneEl.addEventListener('dragleave', () => {
-        dropZoneEl.classList.remove('dragover');
-      });
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragover');
+    });
 
-      dropZoneEl.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZoneEl.classList.remove('dragover');
-        const files = e.dataTransfer.files;
-        if (files.length) handleImageFile(files[0], { dropContentEl, previewContainerEl, previewImgEl, previewInfoEl, dropZoneEl, assign });
-      });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const files = e.dataTransfer.files;
+      if (files.length) handleFile(files[0]);
+    });
 
-      inputEl.addEventListener('change', () => {
-        if (inputEl.files.length) {
-          handleImageFile(inputEl.files[0], { dropContentEl, previewContainerEl, previewImgEl, previewInfoEl, dropZoneEl, assign });
-        }
-      });
-    }
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length) handleFile(fileInput.files[0]);
+    });
 
-    function handleImageFile(file, { dropContentEl, previewContainerEl, previewImgEl, previewInfoEl, dropZoneEl, assign }) {
+    function handleFile(file) {
       const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
       if (!validTypes.includes(file.type)) {
         showError('Please upload a valid image file (PNG, JPG, JPEG, or WEBP).');
@@ -750,50 +717,21 @@
         return;
       }
 
+      templateFile = file;
+
       const reader = new FileReader();
       reader.onload = () => {
-        const dataUrl = reader.result;
-        assign(file, dataUrl);
-        previewImgEl.src = dataUrl;
+        templateBase64 = reader.result;
+        previewImg.src = templateBase64;
         const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-        previewInfoEl.textContent = `${file.name} · ${sizeMB} MB`;
-        dropContentEl.style.display = 'none';
-        previewContainerEl.classList.add('visible');
-        dropZoneEl.classList.add('has-preview');
+        previewInfo.textContent = `${file.name} · ${sizeMB} MB`;
+        dropContent.style.display = 'none';
+        previewContainer.classList.add('visible');
+        dropZone.classList.add('has-preview');
         updateGenerateState();
       };
       reader.readAsDataURL(file);
     }
-
-    bindImageDropZone({
-      dropZoneEl: dropZone,
-      dropContentEl: dropContent,
-      previewContainerEl: previewContainer,
-      previewImgEl: previewImg,
-      previewInfoEl: previewInfo,
-      browseBtnEl: browseBtn,
-      changeBtnEl: changeBtn,
-      inputEl: fileInput,
-      assign: (file, dataUrl) => {
-        templateFile = file;
-        templateBase64 = dataUrl;
-      }
-    });
-
-    bindImageDropZone({
-      dropZoneEl: referenceDropZone,
-      dropContentEl: referenceDropContent,
-      previewContainerEl: referencePreviewContainer,
-      previewImgEl: referencePreviewImg,
-      previewInfoEl: referencePreviewInfo,
-      browseBtnEl: referenceBrowseBtn,
-      changeBtnEl: referenceChangeBtn,
-      inputEl: referenceInput,
-      assign: (file, dataUrl) => {
-        referenceFile = file;
-        referenceBase64 = dataUrl;
-      }
-    });
 
     /* ===== Services input ===== */
     servicesInput.addEventListener('input', updateGenerateState);
@@ -832,7 +770,6 @@
       /* Disable inputs while generating */
       apiKeyInput.disabled = loading;
       fileInput.disabled   = loading;
-      referenceInput.disabled = loading;
       servicesInput.disabled = loading;
       extraPrompt.disabled   = loading;
       styleSelect.disabled   = loading;
@@ -862,38 +799,6 @@
 4. COLOR PALETTE: List the 2-4 primary brand colors.
 5. LAYOUT + STYLE: Describe the composition and what kind of professional banner style would fit best.
 Be specific and concise.`
-              },
-              { type: 'image_url', image_url: { url: base64DataUrl } }
-            ]
-          }]
-        })
-      });
-      const data = await resp.json();
-      if (data.error) throw new Error(data.error.message);
-      return data.choices[0].message.content;
-    }
-
-    async function analyzeReferenceBanner(apiKey, base64DataUrl) {
-      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + apiKey,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          max_tokens: 500,
-          messages: [{
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `Analyze this reference social media banner and extract the design recipe to imitate. Provide:
-1. VISUAL STRUCTURE: overall composition pattern such as headline block, image collage, circular frames, footer strip, cutout portrait placement.
-2. IMAGE STYLE: what type of professional imagery is used and how it is cropped/composed.
-3. BRANDING APPROACH: color usage, gradients, contrast, spacing, and professional ad feel.
-4. REUSABLE DESIGN RULES: concise rules another banner should follow to feel similar without copying text literally.
-Keep it concrete and concise.`
               },
               { type: 'image_url', image_url: { url: base64DataUrl } }
             ]
@@ -1100,7 +1005,7 @@ Keep it concrete and concise.`
       });
     }
 
-    async function editTemplateWithAI(apiKey, templateDataUrl, templateAnalysis, referenceAnalysis, services, additional, style, maskThreshold) {
+    async function editTemplateWithAI(apiKey, templateDataUrl, templateAnalysis, services, additional, style, maskThreshold) {
       const { templateBlob, maskBlob, overlayBlob } = await createEditAssets(templateDataUrl, maskThreshold);
 
       const styleGuide = {
@@ -1110,11 +1015,25 @@ Keep it concrete and concise.`
         corporate: 'corporate professional campaign style, clean trustworthy healthcare marketing aesthetic'
       }[style] || 'photorealistic professional photography, premium advertising quality, polished commercial retouching';
 
+      const exampleStyleRecipe = [
+        'Design target inspired by the shared example poster:',
+        '- premium clinic/social-media poster aesthetic, not a plain photo edit',
+        '- strong headline-led composition with clean text-safe zones',
+        '- if the layout allows, favor a poster structure similar to the sample: strong hero area, supporting collage visuals to one side, and polished footer/support zones',
+        '- rich pink/magenta brand gradient or brand-colored hero area when it fits the template palette',
+        '- elegant curved/flowing background shapes and soft light gradients',
+        '- multiple service-relevant visuals presented as a neat collage, especially circular or framed crops if the layout allows',
+        '- clean professional healthcare-ad look with balanced whitespace and sharp contrast',
+        '- support imagery should feel like polished brochure/poster design, not random stock photography pasted in',
+        '- final output should resemble a finished promotional post/banner for a clinic or service business'
+      ].join('\n');
+
       const prompt = [
         `Fill ONLY the transparent blank regions of this banner for: "${services}".`,
         '',
         `Template analysis: ${templateAnalysis}`,
-        referenceAnalysis ? `Reference style to imitate: ${referenceAnalysis}` : '',
+        '',
+        exampleStyleRecipe,
         '',
         'CRITICAL RULES:',
         '- Preserve every existing element exactly as-is: logo, all text, footer, phone/address, borders, badges, decorative shapes, existing people, faces, product shots, and cutout photos',
@@ -1122,9 +1041,8 @@ Keep it concrete and concise.`
         '- Add content only inside the masked blank regions',
         '- Generate a polished professional social media banner, not a random full-scene stock photo',
         '- Build the result like a premium marketing poster with deliberate composition, not a single generic AI scene',
-        '- Prefer structured banner composition: bold hero area, supporting medical/service visuals, framed crops, soft branded gradients, subtle background texture, and clean text-safe negative space where needed',
+        '- Prefer structured banner composition: bold hero area, supporting service visuals, framed crops, soft branded gradients, subtle background texture, and clean text-safe negative space where needed',
         '- If the template suggests circular frames, panels, or image placeholders, place focused visuals inside them rather than creating one giant photo across the whole canvas',
-        '- Use premium ad-design hierarchy similar to the reference example when one is provided',
         `- Visual style: ${styleGuide}`,
         `- Make the imagery directly relevant to "${services}" using premium healthcare/industry marketing aesthetics`,
         '- Avoid uncanny faces, distorted anatomy, extra fingers, warped objects, low-end stock-photo look, or noisy clutter',
@@ -1179,19 +1097,16 @@ Keep it concrete and concise.`
       const startTime = Date.now();
 
       try {
-        btnText.textContent = referenceBase64 ? 'Analyzing template + reference… (1/2)' : 'Analyzing template… (1/2)';
-        const [analysis, referenceAnalysis] = await Promise.all([
-          analyzeTemplate(apiKey, templateBase64),
-          referenceBase64 ? analyzeReferenceBanner(apiKey, referenceBase64) : Promise.resolve('')
-        ]);
+        btnText.textContent = 'Analyzing template… (1/2)';
+        const analysis = await analyzeTemplate(apiKey, templateBase64);
 
         btnText.textContent = 'Generating professional banner… (2/2)';
-        const finalDataUrl = await editTemplateWithAI(apiKey, templateBase64, analysis, referenceAnalysis, services, additional, style, maskThreshold);
+        const finalDataUrl = await editTemplateWithAI(apiKey, templateBase64, analysis, services, additional, style, maskThreshold);
         generatedBase64 = finalDataUrl.split(',')[1];
 
         resultImg.src = finalDataUrl;
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        resultMeta.textContent = 'Generated in ' + elapsed + 's · 1024×1024 · Template preserved ✓' + (referenceBase64 ? ' · Reference-guided' : '');
+        resultMeta.textContent = 'Generated in ' + elapsed + 's · 1024×1024 · Template preserved ✓';
         resultArea.classList.add('visible');
         resultArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
