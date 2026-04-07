@@ -1005,7 +1005,28 @@ Be specific and concise.`
       });
     }
 
-    async function editTemplateWithAI(apiKey, templateDataUrl, templateAnalysis, services, additional, style, maskThreshold) {
+    async function generateServicePoints(apiKey, services, additional) {
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          max_tokens: 180,
+          messages: [{
+            role: 'user',
+            content: `Write exactly 4 short professional service bullet points for a social media banner about: ${services}. ${additional ? 'Extra context: ' + additional + '. ' : ''}Rules: each point must be 2-5 words, specific, marketable, no numbering, no intro sentence, one point per line.`
+          }]
+        })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error.message);
+      return data.choices[0].message.content.trim();
+    }
+
+    async function editTemplateWithAI(apiKey, templateDataUrl, templateAnalysis, servicePoints, services, additional, style, maskThreshold) {
       const { templateBlob, maskBlob, overlayBlob } = await createEditAssets(templateDataUrl, maskThreshold);
 
       const styleGuide = {
@@ -1016,7 +1037,7 @@ Be specific and concise.`
       }[style] || 'photorealistic professional photography, premium advertising quality, polished commercial retouching';
 
       const exampleStyleRecipe = [
-        'Design target inspired by the shared example poster:',
+        'Design target inspired by the shared example poster, but use it for style only:',
         '- premium clinic/social-media poster aesthetic, not a plain photo edit',
         '- strong headline-led composition with clean text-safe zones',
         '- if the layout allows, favor a poster structure similar to the sample: strong hero area, supporting collage visuals to one side, and polished footer/support zones',
@@ -1025,6 +1046,7 @@ Be specific and concise.`
         '- multiple service-relevant visuals presented as a neat collage, especially circular or framed crops if the layout allows',
         '- clean professional healthcare-ad look with balanced whitespace and sharp contrast',
         '- support imagery should feel like polished brochure/poster design, not random stock photography pasted in',
+        '- do NOT copy the sample image logo, footer, phone/address strip, doctor cutout, or any exact person/product from the sample',
         '- final output should resemble a finished promotional post/banner for a clinic or service business'
       ].join('\n');
 
@@ -1032,6 +1054,7 @@ Be specific and concise.`
         `Fill ONLY the transparent blank regions of this banner for: "${services}".`,
         '',
         `Template analysis: ${templateAnalysis}`,
+        servicePoints ? `Suggested service points to include if the template has a text-safe blank area:\n${servicePoints}` : '',
         '',
         exampleStyleRecipe,
         '',
@@ -1043,11 +1066,13 @@ Be specific and concise.`
         '- Build the result like a premium marketing poster with deliberate composition, not a single generic AI scene',
         '- Prefer structured banner composition: bold hero area, supporting service visuals, framed crops, soft branded gradients, subtle background texture, and clean text-safe negative space where needed',
         '- If the template suggests circular frames, panels, or image placeholders, place focused visuals inside them rather than creating one giant photo across the whole canvas',
+        '- Use the shared sample only as style inspiration; never copy its branding, footer details, or person image',
         `- Visual style: ${styleGuide}`,
         `- Make the imagery directly relevant to "${services}" using premium healthcare/industry marketing aesthetics`,
+        '- If there is a clear empty text area, add 3-4 short service-related bullet points in clean readable typography using the suggested points or close variants',
+        '- Do not overwrite or change any text already present in the template',
         '- Avoid uncanny faces, distorted anatomy, extra fingers, warped objects, low-end stock-photo look, or noisy clutter',
         '- Match the template brand colors and keep the result looking like an expertly designed ad creative',
-        '- Do not add new text beyond what already exists in the template',
         additional ? `- Additional requirements: ${additional}` : ''
       ].filter(Boolean).join('\n');
 
@@ -1098,10 +1123,13 @@ Be specific and concise.`
 
       try {
         btnText.textContent = 'Analyzing template… (1/2)';
-        const analysis = await analyzeTemplate(apiKey, templateBase64);
+        const [analysis, servicePoints] = await Promise.all([
+          analyzeTemplate(apiKey, templateBase64),
+          generateServicePoints(apiKey, services, additional)
+        ]);
 
         btnText.textContent = 'Generating professional banner… (2/2)';
-        const finalDataUrl = await editTemplateWithAI(apiKey, templateBase64, analysis, services, additional, style, maskThreshold);
+        const finalDataUrl = await editTemplateWithAI(apiKey, templateBase64, analysis, servicePoints, services, additional, style, maskThreshold);
         generatedBase64 = finalDataUrl.split(',')[1];
 
         resultImg.src = finalDataUrl;
