@@ -900,7 +900,7 @@ Be specific and concise.`
       return fillMask;
     }
 
-    async function createEditAssets(templateDataUrl, threshold) {
+    async function createOverlayBlob(templateDataUrl, threshold) {
       return new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = async () => {
@@ -916,13 +916,6 @@ Be specific and concise.`
           const src = imageData.data;
           const fillMask = buildBlankRegionMask(src, width, height, threshold);
 
-          const maskCanvas = document.createElement('canvas');
-          maskCanvas.width = width;
-          maskCanvas.height = height;
-          const maskCtx = maskCanvas.getContext('2d');
-          const maskData = maskCtx.createImageData(width, height);
-          const maskPixels = maskData.data;
-
           const overlayCanvas = document.createElement('canvas');
           overlayCanvas.width = width;
           overlayCanvas.height = height;
@@ -933,11 +926,6 @@ Be specific and concise.`
           for (let i = 0; i < fillMask.length; i++) {
             const offset = i * 4;
             const shouldFill = fillMask[i] === 1;
-
-            maskPixels[offset] = 0;
-            maskPixels[offset + 1] = 0;
-            maskPixels[offset + 2] = 0;
-            maskPixels[offset + 3] = shouldFill ? 0 : 255;
 
             if (shouldFill) {
               overlayPixels[offset] = 0;
@@ -952,16 +940,9 @@ Be specific and concise.`
             }
           }
 
-          maskCtx.putImageData(maskData, 0, 0);
           overlayCtx.putImageData(overlayData, 0, 0);
-
-          const [templateBlob, maskBlob, overlayBlob] = await Promise.all([
-            new Promise((res) => canvas.toBlob(res, 'image/png')),
-            new Promise((res) => maskCanvas.toBlob(res, 'image/png')),
-            new Promise((res) => overlayCanvas.toBlob(res, 'image/png'))
-          ]);
-
-          resolve({ templateBlob, maskBlob, overlayBlob });
+          const overlayBlob = await new Promise((res) => overlayCanvas.toBlob(res, 'image/png'));
+          resolve(overlayBlob);
         };
         img.onerror = reject;
         img.src = templateDataUrl;
@@ -977,10 +958,10 @@ Be specific and concise.`
       });
     }
 
-    async function compositePreservedTemplate(editedDataUrl, overlayBlob) {
+    async function compositePreservedTemplate(backgroundDataUrl, overlayBlob) {
       const overlayDataUrl = await blobToDataUrl(overlayBlob);
       return new Promise((resolve, reject) => {
-        const editedImg = new Image();
+        const bgImg = new Image();
         const overlayImg = new Image();
         let loaded = 0;
 
@@ -991,16 +972,16 @@ Be specific and concise.`
           canvas.width = 1024;
           canvas.height = 1024;
           const ctx = canvas.getContext('2d');
-          ctx.drawImage(editedImg, 0, 0, 1024, 1024);
+          ctx.drawImage(bgImg, 0, 0, 1024, 1024);
           ctx.drawImage(overlayImg, 0, 0, 1024, 1024);
           resolve(canvas.toDataURL('image/png'));
         }
 
-        editedImg.onload = handleLoad;
+        bgImg.onload = handleLoad;
         overlayImg.onload = handleLoad;
-        editedImg.onerror = () => reject(new Error('Failed to load generated image for final compositing.'));
+        bgImg.onerror = () => reject(new Error('Failed to load generated background for final compositing.'));
         overlayImg.onerror = () => reject(new Error('Failed to load template overlay for preservation.'));
-        editedImg.src = editedDataUrl;
+        bgImg.src = backgroundDataUrl;
         overlayImg.src = overlayDataUrl;
       });
     }
@@ -1026,9 +1007,7 @@ Be specific and concise.`
       return data.choices[0].message.content.trim();
     }
 
-    async function editTemplateWithAI(apiKey, templateDataUrl, templateAnalysis, servicePoints, services, additional, style, maskThreshold) {
-      const { templateBlob, maskBlob, overlayBlob } = await createEditAssets(templateDataUrl, maskThreshold);
-
+    async function generateTemplateBackground(apiKey, templateAnalysis, servicePoints, services, additional, style) {
       const styleGuide = {
         photorealistic: 'photorealistic professional photography, premium advertising quality, polished commercial retouching',
         illustration: 'modern premium illustration, polished marketing graphic style, clean shapes and controlled composition',
@@ -1049,62 +1028,64 @@ Be specific and concise.`
       ].join('\n');
 
       const prompt = [
-        `Fill ONLY the transparent blank regions of this banner for: "${services}".`,
+        `Create a complete 1024x1024 promotional background image for: "${services}".`,
         '',
         `Template analysis: ${templateAnalysis}`,
-        servicePoints ? `Suggested service points to include if the template has a text-safe blank area:\n${servicePoints}` : '',
+        servicePoints ? `Suggested service points for blank text area:\n${servicePoints}` : '',
         '',
         exampleStyleRecipe,
         '',
         'CRITICAL RULES:',
-        '- Preserve every existing element exactly as-is: logo, all text, footer, phone/address, borders, badges, decorative shapes, existing people, faces, product shots, and cutout photos',
-        '- Never redraw, replace, restyle, or mutate any existing human/person already present in the template',
-        '- Add content only inside the masked blank regions',
-        '- Generate a polished professional social media banner, not a random full-scene stock photo',
-        '- Build the result like a premium marketing poster with deliberate composition, not a single generic AI scene',
-        '- Prefer structured banner composition: bold hero area, supporting service visuals, framed crops, soft branded gradients, subtle background texture, and clean text-safe negative space where needed',
-        '- If the template suggests circular frames, panels, or image placeholders, place focused visuals inside them rather than creating one giant photo across the whole canvas',
+        '- This image will be used as the generated base layer first, and then the original template will be placed over it exactly afterward',
+        '- Design the image according to the uploaded template structure so the final overlay fits naturally',
+        '- Keep strong visual content in the blank/image zones identified in the template analysis',
+        '- Preserve clean contrast behind likely text/logo/footer areas so the overlaid original template remains readable',
         '- Never invent or copy any logo, clinic name, footer strip, phone number, address, watermark, mascot, or brand mark that is not already present in the uploaded template',
         '- Never import sample-specific content such as women/pregnancy branding, maternal icons, obstetrics/gynecology wording, or any unrelated specialty text',
+        '- Make imagery directly relevant to the requested services only',
+        '- If the layout suggests circular frames, panels, or image placeholders, create suitable visuals aligned to those positions',
+        '- If there is a likely blank text zone, subtly design space for 3-4 short service points, but do not render duplicate branding/footer details',
         `- Visual style: ${styleGuide}`,
-        `- Make the imagery directly relevant to "${services}" using premium healthcare/industry marketing aesthetics`,
-        '- If there is a clear empty text area, add 3-4 short service-related bullet points in clean readable typography using the suggested points or close variants',
-        '- Do not overwrite or change any text already present in the template',
         '- Avoid uncanny faces, distorted anatomy, extra fingers, warped objects, low-end stock-photo look, or noisy clutter',
-        '- Match the template brand colors and keep the result looking like an expertly designed ad creative',
+        '- Match the template brand colors and create a polished finished marketing background',
         additional ? `- Additional requirements: ${additional}` : ''
       ].filter(Boolean).join('\n');
 
-      const formData = new FormData();
-      formData.append('model', 'gpt-image-1');
-      formData.append('image[]', templateBlob, 'template.png');
-      formData.append('mask', maskBlob, 'mask.png');
-      formData.append('prompt', prompt);
-      formData.append('size', '1024x1024');
-      formData.append('n', '1');
-
-      const resp = await fetch('https://api.openai.com/v1/images/edits', {
+      const resp = await fetch('https://api.openai.com/v1/images/generations', {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + apiKey },
-        body: formData
+        headers: {
+          'Authorization': 'Bearer ' + apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-image-1',
+          prompt: prompt,
+          size: '1024x1024',
+          n: 1
+        })
       });
 
       const data = await resp.json();
       if (data.error) throw new Error(data.error.message);
       const result = data.data[0];
 
-      let editedDataUrl;
       if (result.b64_json) {
-        editedDataUrl = 'data:image/png;base64,' + result.b64_json;
-      } else if (result.url) {
+        return 'data:image/png;base64,' + result.b64_json;
+      }
+      if (result.url) {
         const resp2 = await fetch(result.url);
         const blob = await resp2.blob();
-        editedDataUrl = await blobToDataUrl(blob);
-      } else {
-        throw new Error('Unexpected response format from OpenAI.');
+        return blobToDataUrl(blob);
       }
+      throw new Error('Unexpected response format from OpenAI.');
+    }
 
-      return compositePreservedTemplate(editedDataUrl, overlayBlob);
+    async function buildBannerFromTemplate(apiKey, templateDataUrl, templateAnalysis, servicePoints, services, additional, style, maskThreshold) {
+      const [backgroundDataUrl, overlayBlob] = await Promise.all([
+        generateTemplateBackground(apiKey, templateAnalysis, servicePoints, services, additional, style),
+        createOverlayBlob(templateDataUrl, maskThreshold)
+      ]);
+      return compositePreservedTemplate(backgroundDataUrl, overlayBlob);
     }
 
     /* ===== Generate handler ===== */
@@ -1127,13 +1108,13 @@ Be specific and concise.`
           generateServicePoints(apiKey, services, additional)
         ]);
 
-        btnText.textContent = 'Generating professional banner… (2/2)';
-        const finalDataUrl = await editTemplateWithAI(apiKey, templateBase64, analysis, servicePoints, services, additional, style, maskThreshold);
+        btnText.textContent = 'Generating banner + applying template… (2/2)';
+        const finalDataUrl = await buildBannerFromTemplate(apiKey, templateBase64, analysis, servicePoints, services, additional, style, maskThreshold);
         generatedBase64 = finalDataUrl.split(',')[1];
 
         resultImg.src = finalDataUrl;
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        resultMeta.textContent = 'Generated in ' + elapsed + 's · 1024×1024 · Template preserved ✓';
+        resultMeta.textContent = 'Generated in ' + elapsed + 's · 1024×1024 · Template overlaid ✓';
         resultArea.classList.add('visible');
         resultArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
