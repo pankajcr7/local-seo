@@ -1,0 +1,370 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String               @id @default(cuid())
+  name          String?
+  email         String               @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  role          String               @default("user")
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  memberships   OrganizationMember[]
+  notifications Notification[]
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Organization {
+  id        String               @id @default(cuid())
+  name      String
+  plan      String               @default("free")
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  members   OrganizationMember[]
+  locations Location[]
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  userId         String
+  organizationId String
+  role           String       @default("member")
+  joinedAt       DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+}
+
+model Location {
+  id               String              @id @default(cuid())
+  organizationId   String
+  name             String
+  address          String
+  city             String
+  state            String
+  zip              String
+  country          String              @default("US")
+  phone            String
+  website          String?
+  category         String
+  subcategories    String?
+  latitude         Float?
+  longitude        Float?
+  placeId          String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  gmbProfile       GMBProfile?
+  keywords         Keyword[]
+  rankHistory      RankHistory[]
+  reviews          Review[]
+  posts            Post[]
+  qas              QA[]
+  citations        Citation[]
+  competitors      Competitor[]
+  insights         AIInsight[]
+  notifications    Notification[]
+  reports          Report[]
+  auditResults     AuditResult[]
+  visibilityScores VisibilityScore[]
+}
+
+model GMBProfile {
+  id                 String     @id @default(cuid())
+  locationId         String     @unique
+  completionScore    Int        @default(0)
+  businessName       String?
+  description        String?
+  shortDescription   String?
+  categories         String?
+  hours              String?
+  specialHours       String?
+  phoneNumber        String?
+  website            String?
+  address            String?
+  serviceArea        String?
+  attributes         String?
+  menuUrl            String?
+  bookingUrl         String?
+  products           String?
+  services           String?
+  photoCount         Int        @default(0)
+  coverPhotoUrl      String?
+  logoUrl            String?
+  verificationStatus String     @default("verified")
+  lastSynced         DateTime?
+  location           Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  fields             GMBField[]
+}
+
+model GMBField {
+  id           String     @id @default(cuid())
+  profileId    String
+  fieldName    String
+  fieldLabel   String
+  status       String
+  currentValue String?
+  suggestion   String?
+  impact       String     @default("medium")
+  category     String     @default("basic")
+  profile      GMBProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+model Keyword {
+  id           String        @id @default(cuid())
+  locationId   String
+  keyword      String
+  category     String?
+  searchVolume Int?
+  difficulty   Int?
+  currentRank  Int?
+  bestRank     Int?
+  inLocalPack  Boolean       @default(false)
+  tags         String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  location     Location      @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  rankHistory  RankHistory[]
+
+  @@unique([locationId, keyword])
+}
+
+model RankHistory {
+  id         String   @id @default(cuid())
+  keywordId  String
+  locationId String
+  position   Int?
+  localPack  Boolean  @default(false)
+  featured   Boolean  @default(false)
+  url        String?
+  date       DateTime @default(now())
+  keyword    Keyword  @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([keywordId, date])
+  @@index([locationId, date])
+}
+
+model VisibilityScore {
+  id         String   @id @default(cuid())
+  locationId String
+  organic    Float
+  localPack  Float
+  overall    Float
+  date       DateTime @default(now())
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([locationId, date])
+}
+
+model Review {
+  id             String    @id @default(cuid())
+  locationId     String
+  externalId     String?
+  authorName     String
+  authorImage    String?
+  rating         Int
+  text           String?
+  publishedAt    DateTime
+  replied        Boolean   @default(false)
+  replyText      String?
+  repliedAt      DateTime?
+  sentiment      String?
+  sentimentScore Float?
+  aiDraft        String?
+  flagged        Boolean   @default(false)
+  source         String    @default("google")
+  location       Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([locationId, publishedAt])
+}
+
+model Post {
+  id          String    @id @default(cuid())
+  locationId  String
+  type        String
+  title       String?
+  content     String
+  imageUrl    String?
+  ctaType     String?
+  ctaUrl      String?
+  eventStart  DateTime?
+  eventEnd    DateTime?
+  offerCode   String?
+  status      String    @default("draft")
+  scheduledAt DateTime?
+  publishedAt DateTime?
+  views       Int       @default(0)
+  clicks      Int       @default(0)
+  reactions   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  location    Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+}
+
+model QA {
+  id         String    @id @default(cuid())
+  locationId String
+  question   String
+  askedBy    String?
+  answer     String?
+  answeredBy String?
+  aiDraft    String?
+  upvotes    Int       @default(0)
+  status     String    @default("unanswered")
+  askedAt    DateTime
+  answeredAt DateTime?
+  location   Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+}
+
+model Citation {
+  id           String    @id @default(cuid())
+  locationId   String
+  directory    String
+  directoryUrl String?
+  listingUrl   String?
+  nameMatch    Boolean   @default(false)
+  addressMatch Boolean   @default(false)
+  phoneMatch   Boolean   @default(false)
+  websiteMatch Boolean   @default(false)
+  listed       Boolean   @default(false)
+  accuracy     Int       @default(0)
+  lastChecked  DateTime?
+  location     Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([locationId, directory])
+}
+
+model Competitor {
+  id          String              @id @default(cuid())
+  locationId  String
+  name        String
+  address     String?
+  placeId     String?
+  rating      Float?
+  reviewCount Int?
+  gmbUrl      String?
+  website     String?
+  phone       String?
+  createdAt   DateTime            @default(now())
+  location    Location            @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  rankings    CompetitorRanking[]
+}
+
+model CompetitorRanking {
+  id           String     @id @default(cuid())
+  competitorId String
+  keyword      String
+  position     Int?
+  localPack    Boolean    @default(false)
+  date         DateTime   @default(now())
+  competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([competitorId, date])
+}
+
+model AIInsight {
+  id          String   @id @default(cuid())
+  locationId  String
+  priority    String
+  category    String
+  title       String
+  description String
+  impact      String
+  actionUrl   String?
+  status      String   @default("open")
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+  location    Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([locationId, priority])
+}
+
+model Notification {
+  id         String    @id @default(cuid())
+  userId     String
+  locationId String?
+  type       String
+  title      String
+  message    String
+  read       Boolean   @default(false)
+  actionUrl  String?
+  data       String?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location   Location? @relation(fields: [locationId], references: [id])
+
+  @@index([userId, read, createdAt])
+}
+
+model Report {
+  id         String   @id @default(cuid())
+  locationId String
+  title      String
+  type       String
+  dateFrom   DateTime
+  dateTo     DateTime
+  data       String
+  fileUrl    String?
+  status     String   @default("generated")
+  createdAt  DateTime @default(now())
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+}
+
+model AuditResult {
+  id            String   @id @default(cuid())
+  locationId    String
+  overallScore  Int
+  gmbScore      Int
+  citationScore Int
+  reviewScore   Int
+  keywordScore  Int
+  onPageScore   Int
+  details       String
+  createdAt     DateTime @default(now())
+  location      Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+}
