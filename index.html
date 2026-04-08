@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Banner Generator</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-primary: #0f0f14;
+      --bg-card: #1a1a24;
+      --bg-input: #252532;
+      --text-primary: #f0f0f5;
+      --text-secondary: #8888a0;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --border: #2a2a3a;
+      --radius: 12px;
+      --error: #ef4444;
+      --error-bg: rgba(239, 68, 68, 0.1);
+      --success: #22c55e;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 40px 20px 80px;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #6366f1, #a78bfa, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+    }
+
+    .header p {
+      color: var(--text-secondary);
+      font-size: 1rem;
+    }
+
+    /* Card */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+      transition: border-color 0.2s ease;
+    }
+
+    .card:hover {
+      border-color: #3a3a4a;
+    }
+
+    /* Labels */
+    label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    label .optional {
+      color: var(--text-secondary);
+      font-weight: 400;
+    }
+
+    /* Inputs */
+    .input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    textarea,
+    select {
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 0.95rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+      color: var(--text-secondary);
+      opacity: 0.7;
+    }
+
+    textarea {
+      min-height: 80px;
+      resize: vertical;
+    }
+
+    select {
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238888a0' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 40px;
+    }
+
+    select option {
+      background: var(--bg-input);
+      color: var(--text-primary);
+    }
+
+    .api-key-input {
+      padding-right: 48px;
+    }
+
+    .toggle-visibility {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 1.2rem;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: color 0.2s ease;
+      line-height: 1;
+    }
+
+    .toggle-visibility:hover {
+      color: var(--text-primary);
+    }
+
+    /* Drop Zone */
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 40px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s ease, background 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .drop-zone:hover,
+    .drop-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(99, 102, 241, 0.05);
+    }
+
+    .drop-zone.has-preview {
+      padding: 16px;
+    }
+
+    .drop-zone-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .drop-zone-icon {
+      font-size: 2.5rem;
+      opacity: 0.6;
+    }
+
+    .drop-zone-text {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    .drop-zone-text strong {
+      color: var(--text-primary);
+    }
+
+    .browse-btn {
+      display: inline-block;
+      padding: 8px 20px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .browse-btn:hover {
+      background: var(--border);
+      border-color: #4a4a5a;
+    }
+
+    .drop-zone input[type="file"] {
+      display: none;
+    }
+
+    .preview-container {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .preview-container.visible {
+      display: flex;
+    }
+
+    .preview-container img {
+      max-width: 300px;
+      max-height: 300px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      object-fit: contain;
+    }
+
+    .preview-info {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .change-btn {
+      font-size: 0.8rem;
+      color: var(--accent);
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+      transition: color 0.2s ease;
+    }
+
+    .change-btn:hover {
+      color: var(--accent-hover);
+    }
+
+    /* Generate Button */
+    .generate-btn {
+      width: 100%;
+      padding: 16px 24px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      font-family: inherit;
+      color: #fff;
+      background: linear-gradient(135deg, #6366f1, #7c3aed);
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: opacity 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+      box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .generate-btn:hover:not(:disabled) {
+      opacity: 0.92;
+      box-shadow: 0 6px 24px rgba(99, 102, 241, 0.4);
+    }
+
+    .generate-btn:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    .generate-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .generate-btn.loading {
+      opacity: 0.7;
+      cursor: wait;
+    }
+
+    /* Spinner */
+    .spinner {
+      display: none;
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    .loading .spinner {
+      display: inline-block;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Error Alert */
+    .error-alert {
+      display: none;
+      padding: 14px 18px;
+      background: var(--error-bg);
+      border: 1px solid var(--error);
+      border-radius: 8px;
+      color: #fca5a5;
+      font-size: 0.9rem;
+      margin-top: 16px;
+      line-height: 1.5;
+      animation: slideIn 0.25s ease;
+    }
+
+    .error-alert.visible {
+      display: block;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Result Area */
+    .result-area {
+      display: none;
+      margin-top: 24px;
+      animation: fadeIn 0.4s ease;
+    }
+
+    .result-area.visible {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .result-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      text-align: center;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+    }
+
+    .result-card h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text-primary);
+    }
+
+    .result-image-wrap {
+      display: inline-block;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: var(--bg-input);
+    }
+
+    .result-image-wrap img {
+      display: block;
+      width: 100%;
+      max-width: 540px;
+    }
+
+    .result-meta {
+      margin-top: 12px;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .result-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+
+    .result-actions button {
+      padding: 12px 24px;
+      font-size: 0.95rem;
+      font-weight: 500;
+      font-family: inherit;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: opacity 0.2s ease, transform 0.1s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .result-actions button:active {
+      transform: scale(0.97);
+    }
+
+    .download-btn {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: #fff;
+      border: none;
+      box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+    }
+
+    .download-btn:hover {
+      opacity: 0.9;
+    }
+
+    .regenerate-btn {
+      background: transparent;
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .regenerate-btn:hover {
+      background: var(--bg-input);
+      border-color: #4a4a5a;
+    }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .container {
+        padding: 24px 16px 60px;
+      }
+
+      .header h1 {
+        font-size: 1.6rem;
+      }
+
+      .card {
+        padding: 18px;
+      }
+
+      .drop-zone {
+        padding: 28px 16px;
+      }
+
+      .preview-container img {
+        max-width: 220px;
+        max-height: 220px;
+      }
+
+      .result-actions {
+        flex-direction: column;
+      }
+
+      .result-actions button {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- Header -->
+    <div class="header">
+      <h1>AI Banner Generator</h1>
+      <p>Create stunning social media banners from your template</p>
+    </div>
+
+    <!-- API Key -->
+    <div class="card">
+      <label for="apiKey">OpenAI API Key</label>
+      <div class="input-wrap">
+        <input
+          type="password"
+          id="apiKey"
+          class="api-key-input"
+          placeholder="sk-..."
+          autocomplete="off"
+          spellcheck="false"
+        >
+        <button type="button" class="toggle-visibility" id="toggleKey" title="Show/hide key">&#9673;</button>
+      </div>
+    </div>
+
+    <!-- Template Upload -->
+    <div class="card">
+      <label>Template Image</label>
+      <div class="drop-zone" id="dropZone">
+        <div class="drop-zone-content" id="dropContent">
+          <div class="drop-zone-icon">&#128444;</div>
+          <div class="drop-zone-text">
+            <strong>Drag &amp; drop</strong> your template image here
+          </div>
+          <span class="browse-btn" id="browseBtn">Browse Files</span>
+          <div class="drop-zone-text" style="font-size:0.78rem;">PNG, JPG, JPEG, or WEBP &middot; Max 4 MB</div>
+        </div>
+        <div class="preview-container" id="previewContainer">
+          <img id="previewImg" src="" alt="Template preview">
+          <div class="preview-info" id="previewInfo"></div>
+          <button type="button" class="change-btn" id="changeBtn">Change image</button>
+        </div>
+        <input type="file" id="fileInput" accept="image/png,image/jpeg,image/jpg,image/webp">
+      </div>
+    </div>
+
+    <!-- Services -->
+    <div class="card">
+      <label for="services">Your Business Services</label>
+      <input
+        type="text"
+        id="services"
+        placeholder="e.g., Professional Plumbing &amp; Heating Services"
+        spellcheck="false"
+      >
+    </div>
+
+    <!-- Additional Prompt -->
+    <div class="card">
+      <label for="extraPrompt">Additional Instructions <span class="optional">(optional)</span></label>
+      <textarea
+        id="extraPrompt"
+        placeholder="e.g., Use blue and gold colors, modern style, include tools imagery"
+        spellcheck="false"
+      ></textarea>
+    </div>
+
+    <div class="card">
+      <label for="styleSelect">Banner Style</label>
+      <select id="styleSelect">
+        <option value="photorealistic">&#128248; Photorealistic</option>
+        <option value="corporate">&#128188; Corporate / Professional</option>
+        <option value="illustration">&#127912; Modern Illustration</option>
+        <option value="minimalist">&#10024; Minimalist</option>
+      </select>
+      <div style="margin-top:16px;">
+        <label for="sensitivitySlider">
+          Fill Sensitivity <span class="optional">(how much white to fill)</span>
+          <span id="sensitivityValue" style="color:var(--accent);margin-left:8px;">235</span>
+        </label>
+        <input type="range" id="sensitivitySlider" min="200" max="254" value="235" step="1" style="width:100%;margin-top:8px;accent-color:var(--accent);">
+        <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:var(--text-secondary);margin-top:4px;">
+          <span>Conservative (keep more template)</span>
+          <span>Aggressive (fill more areas)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Generate -->
+    <div class="card" style="background:transparent;border:none;box-shadow:none;padding:0;">
+      <button type="button" class="generate-btn" id="generateBtn" disabled>
+        <span class="spinner" id="spinner"></span>
+        <span id="btnText">&#10024; Generate Banner</span>
+      </button>
+      <div class="error-alert" id="errorAlert"></div>
+    </div>
+
+    <!-- Result -->
+    <div class="result-area" id="resultArea">
+      <div class="result-card">
+        <h3>Your Generated Banner</h3>
+        <div class="result-image-wrap">
+          <img id="resultImg" src="" alt="Generated banner">
+        </div>
+        <div class="result-meta" id="resultMeta"></div>
+        <div class="result-actions">
+          <button type="button" class="download-btn" id="downloadBtn">&#11015; Download Banner</button>
+          <button type="button" class="regenerate-btn" id="regenerateBtn">&#8635; Regenerate</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    /* ===== DOM refs ===== */
+    const apiKeyInput     = document.getElementById('apiKey');
+    const toggleKeyBtn    = document.getElementById('toggleKey');
+    const dropZone        = document.getElementById('dropZone');
+    const dropContent     = document.getElementById('dropContent');
+    const previewContainer= document.getElementById('previewContainer');
+    const previewImg      = document.getElementById('previewImg');
+    const previewInfo     = document.getElementById('previewInfo');
+    const changeBtn       = document.getElementById('changeBtn');
+    const browseBtn       = document.getElementById('browseBtn');
+    const fileInput       = document.getElementById('fileInput');
+    const servicesInput   = document.getElementById('services');
+    const extraPrompt     = document.getElementById('extraPrompt');
+    const styleSelect     = document.getElementById('styleSelect');
+    const sensitivitySlider = document.getElementById('sensitivitySlider');
+    const sensitivityValue = document.getElementById('sensitivityValue');
+    const generateBtn     = document.getElementById('generateBtn');
+    const btnText         = document.getElementById('btnText');
+    const spinner         = document.getElementById('spinner');
+    const errorAlert      = document.getElementById('errorAlert');
+    const resultArea      = document.getElementById('resultArea');
+    const resultImg       = document.getElementById('resultImg');
+    const resultMeta      = document.getElementById('resultMeta');
+    const downloadBtn     = document.getElementById('downloadBtn');
+    const regenerateBtn   = document.getElementById('regenerateBtn');
+
+    /* ===== State ===== */
+    let templateFile    = null;   // raw File object
+    let templateBase64  = null;   // data URL for preview
+    let generatedBase64 = null;   // base64 of result (no prefix)
+    let isGenerating    = false;
+    let errorTimer      = null;
+
+    /* ===== LocalStorage: API key ===== */
+    const STORAGE_KEY = 'aibanner_openai_key';
+
+    (function loadSavedKey() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        apiKeyInput.value = saved;
+      }
+      updateGenerateState();
+    })();
+
+    apiKeyInput.addEventListener('input', () => {
+      localStorage.setItem(STORAGE_KEY, apiKeyInput.value.trim());
+      updateGenerateState();
+    });
+
+    /* ===== Toggle key visibility ===== */
+    toggleKeyBtn.addEventListener('click', () => {
+      const showing = apiKeyInput.type === 'text';
+      apiKeyInput.type = showing ? 'password' : 'text';
+      toggleKeyBtn.innerHTML = showing ? '&#9673;' : '&#9678;';
+      toggleKeyBtn.title = showing ? 'Show key' : 'Hide key';
+    });
+
+    /* ===== File upload / drag-drop ===== */
+    browseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.click();
+    });
+
+    changeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.click();
+    });
+
+    dropZone.addEventListener('click', (e) => {
+      if (e.target === dropZone || e.target.closest('.drop-zone-content')) {
+        fileInput.click();
+      }
+    });
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragover');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const files = e.dataTransfer.files;
+      if (files.length) handleFile(files[0]);
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length) handleFile(fileInput.files[0]);
+    });
+
+    function handleFile(file) {
+      /* Validate type */
+      const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        showError('Please upload a valid image file (PNG, JPG, JPEG, or WEBP).');
+        return;
+      }
+
+      /* Validate size (4 MB) */
+      if (file.size > 4 * 1024 * 1024) {
+        showError('Image must be under 4 MB.');
+        return;
+      }
+
+      templateFile = file;
+
+      /* Preview */
+      const reader = new FileReader();
+      reader.onload = () => {
+        templateBase64 = reader.result;
+        previewImg.src = templateBase64;
+        const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+        previewInfo.textContent = `${file.name} \u00b7 ${sizeMB} MB`;
+        dropContent.style.display = 'none';
+        previewContainer.classList.add('visible');
+        dropZone.classList.add('has-preview');
+        updateGenerateState();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    /* ===== Services input ===== */
+    servicesInput.addEventListener('input', updateGenerateState);
+    sensitivitySlider.addEventListener('input', () => {
+      sensitivityValue.textContent = sensitivitySlider.value;
+    });
+
+    /* ===== Generate button state ===== */
+    function updateGenerateState() {
+      const ready = apiKeyInput.value.trim() &&
+                    templateFile &&
+                    servicesInput.value.trim();
+      generateBtn.disabled = !ready || isGenerating;
+    }
+
+    /* ===== Error handling ===== */
+    function showError(msg) {
+      clearTimeout(errorTimer);
+      errorAlert.textContent = msg;
+      errorAlert.classList.add('visible');
+      errorTimer = setTimeout(dismissError, 10000);
+    }
+
+    function dismissError() {
+      clearTimeout(errorTimer);
+      errorAlert.classList.remove('visible');
+    }
+
+    /* ===== Loading state ===== */
+    function setLoading(loading) {
+      isGenerating = loading;
+      generateBtn.classList.toggle('loading', loading);
+      generateBtn.disabled = loading;
+      btnText.textContent = loading ? 'Generating your banner\u2026' : '\u2728 Generate Banner';
+
+      /* Disable inputs while generating */
+      apiKeyInput.disabled = loading;
+      fileInput.disabled   = loading;
+      servicesInput.disabled = loading;
+      extraPrompt.disabled   = loading;
+      styleSelect.disabled   = loading;
+      sensitivitySlider.disabled = loading;
+    }
+
+    /* ===== Step 1: Analyze template with GPT-4o vision ===== */
+    async function analyzeTemplate(apiKey, base64DataUrl) {
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          max_tokens: 600,
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Analyze this social media banner template in detail. Provide:
+1. BLANK AREAS: Describe exactly where the white/empty areas are (top, center, left panel, etc.) and their approximate size/proportion
+2. PRESERVED ELEMENTS: List all non-blank elements — logo text/icon and its position, footer text (address, phone, website), decorative borders/shapes
+3. COLOR PALETTE: List the 2-4 primary brand colors (approximate hex or descriptive names)
+4. LAYOUT: Describe the overall structure (e.g., "logo top-left, large blank center, footer strip at bottom")
+5. STYLE: What visual style does the template have (modern, classic, bold, minimal, etc.)?
+Be specific and concise.`
+              },
+              { type: 'image_url', image_url: { url: base64DataUrl } }
+            ]
+          }]
+        })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error.message);
+      return data.choices[0].message.content;
+    }
+
+    async function createMaskBlob(templateDataUrl, threshold) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 1024;
+          canvas.height = 1024;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, 1024, 1024);
+
+          const imageData = ctx.getImageData(0, 0, 1024, 1024);
+          const src = imageData.data;
+
+          const maskCanvas = document.createElement('canvas');
+          maskCanvas.width = 1024;
+          maskCanvas.height = 1024;
+          const maskCtx = maskCanvas.getContext('2d');
+          const maskData = maskCtx.createImageData(1024, 1024);
+          const dst = maskData.data;
+
+          for (let i = 0; i < src.length; i += 4) {
+            const r = src[i];
+            const g = src[i + 1];
+            const b = src[i + 2];
+            const isBlank = r > threshold && g > threshold && b > threshold;
+            dst[i] = 0;
+            dst[i + 1] = 0;
+            dst[i + 2] = 0;
+            dst[i + 3] = isBlank ? 0 : 255;
+          }
+
+          maskCtx.putImageData(maskData, 0, 0);
+          maskCanvas.toBlob(resolve, 'image/png');
+        };
+        img.onerror = reject;
+        img.src = templateDataUrl;
+      });
+    }
+
+    async function templateToBlob(templateDataUrl) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 1024;
+          canvas.height = 1024;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, 1024, 1024);
+          canvas.toBlob(resolve, 'image/png');
+        };
+        img.onerror = reject;
+        img.src = templateDataUrl;
+      });
+    }
+
+    async function editTemplateWithAI(apiKey, templateDataUrl, templateAnalysis, services, additional, style, maskThreshold) {
+      const [templateBlob, maskBlob] = await Promise.all([
+        templateToBlob(templateDataUrl),
+        createMaskBlob(templateDataUrl, maskThreshold)
+      ]);
+
+      const styleGuide = {
+        photorealistic: 'photorealistic professional photography, ultra-sharp, commercial quality, 8K resolution',
+        illustration: 'modern flat design illustration, clean vector aesthetic, bold shapes',
+        minimalist: 'minimalist design, clean lines, lots of breathing room, elegant simplicity',
+        corporate: 'corporate professional style, clean and trustworthy, business photography'
+      }[style] || 'photorealistic professional photography, ultra-sharp, commercial quality';
+
+      const prompt = [
+        `Fill ONLY the transparent/blank areas of this social media banner with professional visual content for: "${services}".`,
+        '',
+        `Template context: ${templateAnalysis}`,
+        '',
+        'CRITICAL RULES:',
+        '- Preserve ALL existing template elements EXACTLY: logo, text, address, phone number, borders, decorative elements, color scheme',
+        '- Fill blank areas ONLY with rich, high-quality visual imagery — NO new text unless it was already in the template',
+        `- Visual style: ${styleGuide}`,
+        `- Create imagery that is directly relevant to "${services}" (show the actual work/product/service)`,
+        "- Match and complement the template's existing brand colors perfectly",
+        '- The final result should look like a professionally designed social media post',
+        '- Platform: Instagram/Facebook square format — ensure strong visual impact',
+        additional ? `- Additional requirements: ${additional}` : ''
+      ].filter(Boolean).join('\n');
+
+      const formData = new FormData();
+      formData.append('model', 'gpt-image-1');
+      formData.append('image[]', templateBlob, 'template.png');
+      formData.append('mask', maskBlob, 'mask.png');
+      formData.append('prompt', prompt);
+      formData.append('size', '1024x1024');
+      formData.append('n', '1');
+
+      const resp = await fetch('https://api.openai.com/v1/images/edits', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + apiKey },
+        body: formData
+      });
+
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error.message);
+      return data.data[0];
+    }
+
+    /* ===== Generate handler ===== */
+    async function generate() {
+      dismissError();
+      setLoading(true);
+      resultArea.classList.remove('visible');
+
+      const apiKey = apiKeyInput.value.trim();
+      const services = servicesInput.value.trim();
+      const additional = extraPrompt.value.trim();
+      const style = styleSelect.value;
+      const maskThreshold = parseInt(sensitivitySlider.value, 10);
+      const startTime = Date.now();
+
+      try {
+        btnText.textContent = 'Analyzing template… (1/2)';
+        const analysis = await analyzeTemplate(apiKey, templateBase64);
+
+        btnText.textContent = 'Generating professional banner… (2/2)';
+        const result = await editTemplateWithAI(apiKey, templateBase64, analysis, services, additional, style, maskThreshold);
+
+        let finalDataUrl;
+        if (result.b64_json) {
+          finalDataUrl = 'data:image/png;base64,' + result.b64_json;
+          generatedBase64 = result.b64_json;
+        } else if (result.url) {
+          const resp2 = await fetch(result.url);
+          const blob = await resp2.blob();
+          finalDataUrl = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+          });
+          generatedBase64 = finalDataUrl.split(',')[1];
+        } else {
+          throw new Error('Unexpected response format from OpenAI.');
+        }
+
+        resultImg.src = finalDataUrl;
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        resultMeta.textContent = 'Generated in ' + elapsed + 's · 1024×1024 · Template preserved ✓';
+        resultArea.classList.add('visible');
+        resultArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      } catch (err) {
+        const msg = err.message || 'An unknown error occurred.';
+        if (msg.toLowerCase().includes('invalid') && msg.toLowerCase().includes('key')) {
+          showError('Invalid API key. Please check your OpenAI API key.');
+        } else if (msg.toLowerCase().includes('rate')) {
+          showError('Rate limited. Please wait a moment and try again.');
+        } else if (msg.toLowerCase().includes('billing') || msg.toLowerCase().includes('quota')) {
+          showError('OpenAI quota exceeded. Please check your billing at platform.openai.com.');
+        } else if (msg.toLowerCase().includes('content_policy') || msg.toLowerCase().includes('safety')) {
+          showError('Content policy violation. Try different wording in your services or instructions.');
+        } else if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('failed to fetch')) {
+          showError('Network error. Please check your connection and try again.');
+        } else {
+          showError(msg);
+        }
+      } finally {
+        setLoading(false);
+        updateGenerateState();
+      }
+    }
+
+    /* ===== Download ===== */
+    function downloadBanner() {
+      if (!generatedBase64) return;
+      const ts = Date.now();
+      const link = document.createElement('a');
+      link.href = 'data:image/png;base64,' + generatedBase64;
+      link.download = 'banner-1080x1080-' + ts + '.png';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    /* ===== Event listeners ===== */
+    generateBtn.addEventListener('click', generate);
+    downloadBtn.addEventListener('click', downloadBanner);
+    regenerateBtn.addEventListener('click', generate);
+  </script>
+</body>
+</html>
